@@ -36,8 +36,7 @@ const grid = re => {                      // table with header matching re -> [{
 const rec = () => ({ kv: kvs(), acad: grid(/^qualification$/i), pageText: txt(document.body) });
 const cbOf = r => r.querySelector('input[type=checkbox]');
 const vb = r => {
-  // Updated regex to support emojis/icons like "👁 View"
-  const e = [...r.querySelectorAll('a,button,[role=button],span,i')].find(x => /view/i.test(txt(x)));
+  const e = [...r.querySelectorAll('a,button,[role=button],span,i')].find(x => /^\W*view( document)?\W*$/i.test(txt(x)));
   return e && (e.closest('a,button,[role=button]') || e);
 };
 const rows = () => [...document.querySelectorAll('tr,[role=row]')].filter(r => cbOf(r) && vb(r));
@@ -45,6 +44,14 @@ const key = r => txt(r.cells?.[0] ?? r.children[0]) + '|' + txt(r.cells?.[1] ?? 
 // ----------------------------------------------------------------------
 
 let relayed = [], base = new Set(), busy = false;
+const fresh = () => ({ on: false, dry: true, stop: false, cand: null, docs: [], err: '' });
+let S = fresh();
+const emit = () => send({ t: 'state', S });
+const step = (d, k) => { if (d.step !== k) { d.step = k; emit(); } };
+const probe = () => {
+  const kv = kvs();
+  return { name: kv["candidate's name"], roll: kv['roll number'], docs: rows().map(r => ({ name: txt(r.cells?.[0] ?? r.children[0]), done: cbOf(r).checked })) };
+};
 
 async function getDocument(u) {
   try {
@@ -84,34 +91,42 @@ async function closeView() {
   await sleep(400);
 }
 
-async function verify(file, meta) {
+async function verify(file, meta, d) {
+  step(d, 'upload');
   let r = await send({ t: 'upload', ...file, meta });
-  for (let i = 0; i < 60 && !r.err && r.job_id && !r.status; i++) { await sleep(2000); r = await send({ t: 'poll', id: r.job_id }); }
+  const end = Date.now() + 240000;
+  while (!r.err && r.job_id && !r.status && Date.now() < end) {
+    if (S.stop) throw new Error('Stopped by user');
+    step(d, r.stage === 'agent' ? 'check' : 'read');
+    await sleep(1200); r = await send({ t: 'poll', id: r.job_id });
+  }
   if (r.err) throw new Error(r.err);
-  if (!r.status) throw new Error('backend timeout');
+  if (!r.status) throw new Error('Server took too long to respond');
   return r;
 }
 
-async function check(r, name, details, rd, run) {
+async function check(r, d, rd, id) {
   const b = vb(r);
   base = new Set(frames());
+  step(d, 'capture');
   let file = await direct(b);
   if (!file) {
     const watched = await send({ t: 'watch' });
     if (watched.err) throw new Error(`Could not start PDF tab capture: ${watched.err}`);
+    document.documentElement.dataset.jvCap = '1';
     b.click();
-    try { file = await waitDocument(); } finally { await closeView(); }
+    try { file = await waitDocument(); } finally { delete document.documentElement.dataset.jvCap; await closeView(); }
   }
-  return verify(file, { doc: { name, details }, record: rd, run });
+  return verify(file, { doc: { name: d.name, details: d.details }, record: rd, run: id }, d);
 }
 
-const COL = { ok: ['#137333', '✔'], bad: ['#c5221f', '✖'], rev: ['#b06000', '⚠'] };
+const COL = { ok: ['#137333', '#e6f4ea', '✔'], bad: ['#c5221f', '#fdecea', '✖'], rev: ['#b06000', '#fff4e0', '⚠'] };
 function badge(cb, k, msg, all = []) {
   cb.parentElement.querySelectorAll('[data-jv]').forEach(e => e.remove());
-  const s = document.createElement('span');
-  s.dataset.jv = 1; s.textContent = `${COL[k][1]} ${msg}`; s.title = all.join('\n');
-  s.style.cssText = `display:block;font:12px sans-serif;margin-top:2px;max-width:280px;color:${COL[k][0]}`;
-  cb.after(s); cb.style.outline = `2px solid ${COL[k][0]}`;
+  const s = document.createElement('span'), [c, bg, ic] = COL[k];
+  s.dataset.jv = 1; s.textContent = `${ic} ${msg}`; s.title = all.join('\n');
+  s.style.cssText = `display:block;font:600 12px/1.35 system-ui,sans-serif;margin-top:4px;padding:3px 8px;border-radius:6px;max-width:300px;color:${c};background:${bg}`;
+  cb.after(s); cb.style.outline = `2px solid ${c}`;
 }
 function tick(cb) {
   if (!cb.checked) cb.click();
@@ -124,38 +139,70 @@ async function run(dry) {
   try {
     document.querySelectorAll('[data-jv]').forEach(e => e.remove());
     const rd = rec(), roll = rd.kv['roll number'], id = crypto.randomUUID();
-    if (!roll) return log('review', '-', 'Candidate details not found on page');
-    for (const k of rows().map(key)) {
-      let r = rows().find(x => key(x) === k); if (!r) continue;
-      const [name, details] = k.split('|');
-      if (cbOf(r).checked) { log('pass', name, 'already verified'); continue; }
+    S = fresh(); S.dry = dry;
+    if (!roll) { S.err = 'Candidate details not found on this page'; return emit(); }
+    S.cand = { name: rd.kv["candidate's name"], roll };
+    S.docs = rows().map((r, i) => {
+      const k = key(r), [name, details] = k.split('|'), done = cbOf(r).checked;
+      return { id: i, k, name, details, status: done ? 'skip' : 'wait', msg: done ? 'Already verified on the portal' : '', checks: [], issues: [] };
+    });
+    S.on = true; emit();
+    for (const d of S.docs) {
+      if (d.status === 'skip') continue;
+      if (S.stop) break;
+      let r = rows().find(x => key(x) === d.k); if (!r) { d.status = 'review'; d.msg = 'Row disappeared from the page'; emit(); continue; }
+      d.status = 'run'; d.step = 'capture'; emit();
       let res;
-      try { res = await check(r, name, details, rd, id); }
+      try { res = await check(r, d, rd, id); }
       catch (e) { res = { status: 'review', checks: [{ reason: String(e.message || e) }] }; }
 
-      r = rows().find(x => key(x) === k);
+      r = rows().find(x => key(x) === d.k);
       const cb = r && cbOf(r);
       const why = (res.checks || []).filter(c => c.status && c.status !== 'pass')
         .map(c => c.reason || `${c.field}: PDF "${c.found}" ≠ UI "${c.expected}"`);
       const pass = res.status === 'pass' && !why.length && !(res.checks || []).some(c => c.reason);
-      if (!cb || cb.disabled || kvs()['roll number'] !== roll) { log('review', name, 'page changed, not clicked'); continue; }
+      d.checks = (res.checks || []).filter(c => c.field);
+      d.issues = why.concat((res.checks || []).filter(c => c.reason && !c.status).map(c => c.reason));
+      if (!cb || cb.disabled || kvs()['roll number'] !== roll) { d.status = 'review'; d.msg = 'Page changed while checking, nothing was ticked'; d.issues = []; emit(); continue; }
 
       if (pass) {
-        if (dry) badge(cb, 'ok', 'All checks passed (dry run, not clicked)');
-        else if (tick(cb)) badge(cb, 'ok', 'Verified by tool');
-        else badge(cb, 'rev', 'Checkbox click did not register');
+        d.status = 'pass';
+        if (dry) { d.msg = 'All checks passed (dry run, box not ticked)'; badge(cb, 'ok', 'All checks passed (dry run, not clicked)'); }
+        else if (tick(cb)) { d.ticked = true; d.msg = 'All checks passed, box ticked'; badge(cb, 'ok', 'Verified by tool'); }
+        else { d.status = 'review'; d.msg = 'Checkbox click did not register'; badge(cb, 'rev', d.msg); }
       } else {
-        const m = (res.checks || []).filter(c => c.reason && !c.status).map(c => c.reason);
-        const all = why.concat(m);
-        badge(cb, res.status === 'fail' ? 'bad' : 'rev', all[0] || 'Needs human review', all);
+        d.status = res.status === 'fail' ? 'fail' : 'review';
+        d.msg = d.status === 'fail' ? 'Not ticked: a check failed' : 'Not ticked: needs a human to look';
+        badge(cb, d.status === 'fail' ? 'bad' : 'rev', d.issues[0] || 'Needs human review', d.issues);
       }
-      log(pass ? 'pass' : res.status, name, pass ? (dry ? 'would verify' : 'verified') : (why.join('; ') || 'needs review'));
+      emit();
+      if (!S.stop) await sleep(500 + Math.random() * 700);
     }
-    log('info', '-', 'done');
-  } finally { busy = false; }
+  } finally { S.on = false; S.stop = false; busy = false; emit(); }
 }
 
-chrome.runtime.onMessage.addListener(m => {
+function applyPassed() {
+  if (kvs()['roll number'] !== S.cand?.roll) { S.err = 'The page changed. Run the verification again.'; return emit(); }
+  for (const d of S.docs) {
+    if (d.status !== 'pass' || d.ticked) continue;
+    const r = rows().find(x => key(x) === d.k), cb = r && cbOf(r);
+    if (!cb || cb.disabled) { d.status = 'review'; d.msg = 'Checkbox not available'; continue; }
+    if (tick(cb)) { d.ticked = true; d.msg = 'All checks passed, box ticked'; badge(cb, 'ok', 'Verified by tool'); }
+    else { d.status = 'review'; d.msg = 'Checkbox click did not register'; badge(cb, 'rev', d.msg); }
+  }
+  S.dry = false; emit();
+}
+
+window.addEventListener('message', e => { if (e.source === window && e.data?.jv === 'open' && busy) relayed.push({ url: e.data.url }); });
+
+chrome.runtime.onMessage.addListener((m, s, ok) => {
   if (m.t === 'pdf' && busy) relayed.push(m);
-  if (m.t === 'run' && rows().length) run(m.dry);
+  else if (m.t === 'run' && rows().length) run(m.dry);
+  else if (m.t === 'stop' && busy) S.stop = true;
+  else if (m.t === 'apply' && !busy && S.docs.length) applyPassed();
+  else if (m.t === 'probe' && rows().length) {
+    const pg = probe();
+    if (!busy && S.cand && S.cand.roll !== pg.roll) S = fresh();
+    ok({ S, page: pg });
+  }
 });
