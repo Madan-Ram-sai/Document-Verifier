@@ -46,7 +46,7 @@ async function up({ b64: x, mime: capturedMime, meta }) {
 }
 async function poll(id) {
   const r = await fetch(`${API}/jobs/${id}`, { headers: H });
-  if (r.status === 202) return { job_id: id };
+  if (r.status === 202) return { job_id: id, stage: (await r.json().catch(() => ({}))).stage };
   if (!r.ok) throw new Error('backend ' + r.status);
   return r.json();
 }
@@ -60,5 +60,6 @@ chrome.runtime.onMessage.addListener((m, s, ok) => {
   }
   else if (m.t === 'fetch') { grab(m.url).then(ok, e => ok({ err: String(e) })); return true; }
   else if (m.t === 'upload') { up(m).then(ok, e => ok({ err: String(e) })); return true; }
+  else if (m.t === 'health') { fetch(API + '/health').then(r => r.json()).then(j => ok({ ...j, ok: true }), () => ok({ ok: false })); return true; }
   else if (m.t === 'poll') { poll(m.id).then(ok, e => ok({ err: String(e) })); return true; }
 });

@@ -3,16 +3,40 @@
   "name": "Doc Verifier",
   "version": "0.2.0",
   "minimum_chrome_version": "114",
-  "permissions": ["sidePanel", "storage", "tabs"],
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs"
+  ],
   "host_permissions": "__HOSTS__",
-  "background": { "service_worker": "background.js" },
-  "side_panel": { "default_path": "panel.html" },
-  "action": { "default_title": "Doc Verifier" },
-  "content_scripts": [{
-    "matches": "__MATCHES__",
-    "js": ["content.js"],
-    "all_frames": true,
-    "match_about_blank": true,
-    "run_at": "document_idle"
-  }]
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "action": {
+    "default_title": "Doc Verifier"
+  },
+  "content_scripts": [
+    {
+      "matches": "__MATCHES__",
+      "js": [
+        "main-hook.js"
+      ],
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": "__MATCHES__",
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle"
+    }
+  ]
 }

@@ -20,12 +20,12 @@ const hosts = [...matches, API_URL + '/*'];
 const out = resolve(root, 'dist/extension');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-for (const f of ['background.js', 'content.js', 'panel.html', 'panel.js'])
+for (const f of ['background.js', 'content.js', 'main-hook.js', 'panel.html', 'panel.js'])
   cpSync(resolve(root, 'extension', f), resolve(out, f));
 
 const mf = readFileSync(resolve(root, 'extension/manifest.template.json'), 'utf8')
   .replace('"__HOSTS__"', JSON.stringify(hosts))
-  .replace('"__MATCHES__"', JSON.stringify(matches));
+  .replaceAll('"__MATCHES__"', JSON.stringify(matches));
 writeFileSync(resolve(out, 'manifest.json'), JSON.stringify(JSON.parse(mf), null, 2));
 writeFileSync(resolve(out, 'config.js'), `const CONFIG = ${JSON.stringify({ API_URL, API_KEY: env.API_KEY || '' })};\n`);
 console.log(`Built ${out}\n  backend : ${API_URL}\n  portal  : ${matches.join(', ')}${dev ? '  (dev)' : ''}`);
