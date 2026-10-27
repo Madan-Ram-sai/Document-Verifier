@@ -1,0 +1,16 @@
+{
+  "name": "doc-verifier-server",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "doc-verifier": "file:..",
+    "express": "^4.19.2",
+    "multer": "^2.0.0",
+    "pdf-lib": "^1.17.1"
+  }
+}

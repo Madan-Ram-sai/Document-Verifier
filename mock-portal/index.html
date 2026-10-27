@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><title>Provisional Verification Details (mock)</title>
+<style>
+ body{font:15px sans-serif;margin:24px;max-width:980px} table{border-collapse:collapse;width:100%;margin-bottom:16px}
+ td,th{border:1px solid #ccc;padding:6px 10px;text-align:left} th{background:#e6eef7}
+ a.v{color:#1a5fb4;cursor:pointer;text-decoration:none} .modal{position:fixed;inset:5%;background:#fff;border:2px solid #333;display:none;z-index:9}
+ .modal iframe{width:100%;height:calc(100% - 40px);border:0} .btn-close{float:right;margin:6px}
+</style>
+<h2>Provisional Verification Details</h2>
+<table>
+ <tr><td><b>Roll Number:</b></td><td>GJ01002896</td><td><b>Application Number:</b></td><td>240310258908</td></tr>
+ <tr><td><b>Candidate&rsquo;s Name:</b></td><td>XYZ</td><td><b>Father&rsquo;s Name:</b></td><td>ABC</td></tr>
+ <tr><td><b>Gender:</b></td><td>Male</td><td><b>Date of Birth:</b></td><td>03-10-2006</td></tr>
+</table>
+<table>
+ <tr><th>Qualification</th><th>Board / University</th><th>Passing Year</th><th>Marks Obtained</th><th>Maximum Marks</th><th>Percentage</th><th>Verification Status</th></tr>
+ <tr><td>10th / Matriculation</td><td>GSEB</td><td>2022</td><td>474</td><td>600</td><td>79.00%</td><td><input type="checkbox" checked></td></tr>
+ <tr><td>12th / Intermediate</td><td>GSEB</td><td>2024</td><td>482</td><td>650</td><td>74.15%</td><td><input type="checkbox" checked></td></tr>
+</table>
+<table>
+ <tr><th>Document Name</th><th>Document Details</th><th>View Document</th><th>Verification Status</th></tr>
+ <tr><td>Photo ID Proof (Aadhaar Card)</td><td>Aadhaar Card Number: XXXX XXXX 1234</td>
+     <td><a class="v" href="pdfs/aadhaar.pdf" target="_blank">&#128065; View</a></td><td><input type="checkbox"></td></tr>
+ <tr><td>10th Marksheet</td><td>GSEB, 2022</td>
+     <td><a class="v" href="#" onclick="window.open('pdfs/10th.pdf');return false">&#128065; View</a></td><td><input type="checkbox"></td></tr>
+ <tr><td>12th Marksheet</td><td>GSEB, 2024</td>
+     <td><a class="v" href="#" onclick="openModal('pdfs/12th.pdf');return false">&#128065; View</a></td><td><input type="checkbox"></td></tr>
+ <tr><td>Category Certificate (EWS/OBC/SC/ST)</td><td>EWS Certificate</td>
+     <td><a class="v" href="pdfs/category.pdf" target="_blank">&#128065; View</a></td><td><input type="checkbox"></td></tr>
+</table>
+<div class="modal" id="m"><button class="btn-close" onclick="closeModal()">Close</button><iframe id="f"></iframe></div>
+<script>
+ const openModal = u => { f.src = u; m.style.display = 'block'; };
+ const closeModal = () => { m.style.display = 'none'; f.src = 'about:blank'; };
+</script>
